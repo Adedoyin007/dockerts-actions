@@ -5,15 +5,21 @@ import { BiodataApp } from "@/components/biodata-app";
 
 const THEME_STORAGE_KEY = "biodata-theme";
 
-export default function Home() {
-  const [isDark, setIsDark] = useState(false);
+function getInitialTheme(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
 
-  useEffect(() => {
-    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const nextTheme = storedTheme ? storedTheme === "dark" : prefersDark;
-    setIsDark(nextTheme);
-  }, []);
+  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (storedTheme) {
+    return storedTheme === "dark";
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+export default function Home() {
+  const [isDark, setIsDark] = useState<boolean>(getInitialTheme);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);
