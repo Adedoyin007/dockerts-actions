@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
@@ -8,7 +10,16 @@
 
 html {
   font-family: var(--font-sans);
-  color-scheme: light dark;
+  color-scheme: light;
+  background: #f8fafc;
+}
+
+html.dark {
+  background: #020617;
+}
+
+body {
+  min-height: 100vh;
 }
 
 /* Native date pickers and dropdown arrows follow the page theme. */

@@ -1,0 +1,85 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/home/ec2-user/asiwaju-actions/dockerts' }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${EC2_USERNAME}@${EC2_HOST}" <<SSH
+          set -euo pipefail
+
+          mkdir -p "$(dirname "${DEPLOY_PATH}")"
+
+          if [ -d "${DEPLOY_PATH}/.git" ]; then
+            cd "${DEPLOY_PATH}"
+            git fetch --all --prune
+            git checkout main
+            git pull --ff-only origin main
+          else
+            git clone "${REPO_URL}" "${DEPLOY_PATH}"
+            cd "${DEPLOY_PATH}"
+            git checkout main || git checkout -b main origin/main
+          fi
+
+          cd "${DEPLOY_PATH}"
+          docker compose down -v --remove-orphans || true
+          docker compose up -d --build
+          docker compose ps
+          SSH
+
+      - name: Health check
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for i in $(seq 1 60); do
+            if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${EC2_USERNAME}@${EC2_HOST}" "curl -fsS http://localhost:8000/health" | grep -q '"status":"ok"'; then
+              echo "Backend healthy"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Backend health check failed after deployment" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          for i in $(seq 1 60); do
+            if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${EC2_USERNAME}@${EC2_HOST}" "curl -fsS -o /dev/null http://localhost:3000"; then
+              echo "Frontend healthy"
+              exit 0
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Frontend health check failed after deployment" >&2
+              exit 1
+            fi
+            sleep 2
+          done
